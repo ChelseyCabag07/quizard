@@ -107,7 +107,7 @@
             .then(res => res.json())
             .then(data => {
                 const userList = document.getElementById("userList");
-                userList.innerHTML = data.map(user => <li>${user.name} (${user.email})</li>).join('');
+                userList.innerHTML = data.map(user => `<li>${user.name} (${user.email})</li>`).join('');
             })
             .catch(err => console.error("Error fetching users:", err));
     </script>
