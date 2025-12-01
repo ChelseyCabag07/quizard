@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quizard - Your Study Companion</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <div class="logo-icon">🎓</div>
+            Quizard
+        </div>
+        <div class="navbar-menu">
+            <button class="nav-btn active" onclick="showPage('home')"><i class="fa-solid fa-house"></i> Home</button>
+            <button class="nav-btn" onclick="showPage('summary')"><i class="fa-solid fa-book"></i> Summary</button>
+            <button class="nav-btn" onclick="showPage('flashcard')"><i class="fa-solid fa-clone"></i> Flashcard</button>
+            <button class="nav-btn" onclick="showPage('quiz')"><i class="fa-solid fa-pen"></i> Quiz</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Home Page -->
+        <div id="home" class="page active">
+            <div class="hero">
+                <div class="brain-icon">🧠</div>
+                <h1>Welcome to Quizard</h1>
+                <p>Upload your reviewer and let Quizard be your best study companion!</p>
+            </div>
+
+            <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                <div class="upload-icon"><i class="fa-solid fa-file-circle-plus"></i></div>
+                <h2>Upload Your Reviewer</h2>
+                <p>Supports TXT, PDF, and DOCX files</p>
+                <input type="file" id="fileInput" accept=".txt,.pdf,.docx" onchange="handleFileUpload(event)" style="display:none;">
+                <button class="btn">Choose File</button>
+            </div>
+
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h3>Summaries</h3>
+                    <p>Get concise summaries of your study materials for quick review</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Flashcards</h3>
+                    <p>Interactive flashcards to help you memorize key concepts</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Quizzes</h3>
+                    <p>Test your knowledge with auto-generated quizzes</p>
+                </div>
+            </div>
+
+            <!-- Users List from Backend -->
+            <div class="users-section">
+                <h2>Users from Backend:</h2>
+                <ul id="userList"></ul>
+            </div>
+        </div>
+
+        <!-- Summary Page -->
+        <div id="summary" class="page">
+            <h1>📝 Study Summary</h1>
+            <div class="loading">
+                <div class="spinner"></div>
+            </div>
+            <div class="summary-box" id="summaryBox"></div>
+        </div>
+
+        <!-- Flashcard Page -->
+        <div id="flashcard" class="page">
+            <div class="flashcard" id="flashcardBox" onclick="flipFlashcard()">
+                <h2 id="flashcardText">Flashcard Preview</h2>
+            </div>
+            <div class="flashcard-controls">
+                <button class="btn btn-purple" onclick="prevFlashcard()">Previous</button>
+                <button class="btn btn-purple" onclick="nextFlashcard()">Next</button>
+            </div>
+        </div>
+
+        <!-- Quiz Page -->
+        <div id="quiz" class="page">
+            <div id="quizContainer"></div>
+            <button class="btn btn-success" onclick="submitQuiz()">Submit Quiz</button>
+            <div class="score-display" id="scoreDisplay" style="display:none;">
+                <h2 id="scoreText"></h2>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        // Simple page toggle function
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+        }
+
+       
+        fetch("http://localhost:8080/api/users")
+            .then(res => res.json())
+            .then(data => {
+                const userList = document.getElementById("userList");
+                userList.innerHTML = data.map(user => <li>${user.name} (${user.email})</li>).join('');
+            })
+            .catch(err => console.error("Error fetching users:", err));
+    </script>
+</body>
+</html>
