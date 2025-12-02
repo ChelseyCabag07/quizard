@@ -1,10 +1,11 @@
-
 package com.teamdebug.quizard.controller;
 
 import com.teamdebug.quizard.model.dto.ReviewerResponse;
 import com.teamdebug.quizard.model.entity.Flashcard;
 import com.teamdebug.quizard.model.entity.QuizItem;
 import com.teamdebug.quizard.model.entity.Reviewer;
+import com.teamdebug.quizard.service.FileExtractionService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -14,6 +15,9 @@ import java.util.*;
 @RequestMapping("/api/reviewers")
 @CrossOrigin(origins = {"http://localhost:5500", "http://127.0.0.1:5500"})
 public class ReviewerController {
+
+    @Autowired
+    private FileExtractionService fileExtractionService;
 
     // In-memory storage (replace with database later)
     private Map<Long, Reviewer> reviewers = new HashMap<>();
@@ -29,9 +33,9 @@ public class ReviewerController {
         Map<String, Object> response = new HashMap<>();
 
         try {
-            // Read file content
+            // Read file content using FileExtractionService
             String fileName = file.getOriginalFilename();
-            String content = new String(file.getBytes());
+            String content = fileExtractionService.extractText(file); // ✅ FIXED - Now extracts properly!
 
             // Create reviewer
             Reviewer reviewer = new Reviewer();
