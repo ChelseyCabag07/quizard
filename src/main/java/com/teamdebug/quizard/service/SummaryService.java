@@ -62,7 +62,7 @@ public class SummaryService {
             requestBody.put("messages", List.of(
                 Map.of("role", "user", "content", prompt)
             ));
-            requestBody.put("max_tokens", 2000); // Increase for longer summaries
+            requestBody.put("max_tokens", 5000); // Increase for longer summaries
             requestBody.put("temperature", 0.3); // Lower = more focused
             
             // Make API call

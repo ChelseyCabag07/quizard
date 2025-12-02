@@ -1,24 +1,34 @@
 package com.teamdebug.quizard.model.dto;
 
-import com.teamdebug.quizard.model.entity.QuizItem;
 import java.util.List;
 
 public class QuizResponse {
-
-     private Long reviewerId;
-    private List<QuizItem> questions;
-
+    private List<QuizQuestion> questions;
+    private String message;
+    
     public QuizResponse() {}
-
-    public QuizResponse(Long reviewerId, List<QuizItem> questions) {
-        this.reviewerId = reviewerId;
+    
+    public QuizResponse(List<QuizQuestion> questions) {
         this.questions = questions;
     }
-
-    public Long getReviewerId() { return reviewerId; }
-    public List<QuizItem> getQuestions() { return questions; }
-
-    public void setReviewerId(Long reviewerId) { this.reviewerId = reviewerId; }
-    public void setQuestions(List<QuizItem> questions) { this.questions = questions; }
     
+    public QuizResponse(String message) {
+        this.message = message;
+    }
+    
+    public List<QuizQuestion> getQuestions() {
+        return questions;
+    }
+    
+    public void setQuestions(List<QuizQuestion> questions) {
+        this.questions = questions;
+    }
+    
+    public String getMessage() {
+        return message;
+    }
+    
+    public void setMessage(String message) {
+        this.message = message;
+    }
 }

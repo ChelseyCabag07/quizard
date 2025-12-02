@@ -172,6 +172,7 @@ body {
   margin: 1.5rem 0; 
   white-space: pre-line; 
   line-height: 1.6; 
+  overscroll-behavior: contain;    /* FIX */
 }
 
 /* Flashcards */
