@@ -148,9 +148,4 @@ public class SummaryService {
             return "Error parsing response";
         }
     }
-    
-    private String getApiKey() {
-        // Get from environment variable or application.properties
-        return System.getenv("OPENAI_API_KEY");
-    }
 }
