@@ -1,10 +1,8 @@
 package com.teamdebug.quizard.service;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -20,42 +18,17 @@ public class SummaryService {
     @Autowired
     private RestTemplate restTemplate;
     
-    private static final int MAX_CHUNK_SIZE = 4000;
-    
     public String summarize(String text) {
         if (text.isEmpty()) {
             return "No text provided to summarize.";
         }
         
-        // For short text, use detailed summarization
-        if (text.length() <= MAX_CHUNK_SIZE) {
-            return createDetailedSummary(text);
-        }
-        
-        // For long text, chunk and summarize
-        List<String> chunks = splitIntoChunks(text, MAX_CHUNK_SIZE);
-        List<String> chunkSummaries = chunks.stream()
-            .map(this::createDetailedSummary)
-            .collect(Collectors.toList());
-        
-        String combined = String.join("\n\n", chunkSummaries);
-        
-        // Final pass for coherence
-        if (combined.length() > MAX_CHUNK_SIZE) {
-            return createFinalSummary(combined);
-        }
-        
-        return combined;
+        // Summarize all text comprehensively in one pass if possible
+        return createDetailedSummary(text);
     }
     
     private String createDetailedSummary(String text) {
         String prompt = buildDetailedPrompt(text);
-        return callAIService(prompt);
-    }
-    
-    private String createFinalSummary(String text) {
-        String prompt = "Combine and organize these summaries into a coherent, " +
-                       "comprehensive summary. Maintain all key points and details:\n\n" + text;
         return callAIService(prompt);
     }
     
@@ -79,28 +52,6 @@ public class SummaryService {
             
             Provide a detailed summary:
             """;
-    }
-    
-    private List<String> splitIntoChunks(String text, int chunkSize) {
-        List<String> chunks = new ArrayList<>();
-        
-        // Try to split at paragraph boundaries
-        String[] paragraphs = text.split("\n\n");
-        StringBuilder currentChunk = new StringBuilder();
-        
-        for (String paragraph : paragraphs) {
-            if (currentChunk.length() + paragraph.length() > chunkSize && currentChunk.length() > 0) {
-                chunks.add(currentChunk.toString());
-                currentChunk = new StringBuilder();
-            }
-            currentChunk.append(paragraph).append("\n\n");
-        }
-        
-        if (currentChunk.length() > 0) {
-            chunks.add(currentChunk.toString());
-        }
-        
-        return chunks;
     }
     
     private String callAIService(String prompt) {
