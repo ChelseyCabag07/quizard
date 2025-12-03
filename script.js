@@ -7,63 +7,48 @@ let questions = [];
 let showingAnswer = false;
 let backendConnected = false;
 
+// Get auth token from localStorage
+function getAuthToken() {
+    return localStorage.getItem('userToken');
+}
+
+// Get auth headers
+function getAuthHeaders() {
+    const headers = { 'Content-Type': 'application/json' };
+    const token = getAuthToken();
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+}
+
 async function testBackendConnection() {
     try {
         const response = await fetch(`${API_BASE_URL}/users`, {
             method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
+            headers: getAuthHeaders()
         });
 
         if (response.ok) {
             console.log('✅ Backend connected successfully!');
             backendConnected = true;
-            hideBackendWarning();
-
             const users = await response.json();
             displayUsers(users);
-
             return true;
+        } else if (response.status === 401) {
+            console.warn('⚠️ Authentication required');
+            backendConnected = true; // Backend is up, just needs auth
+            return false;
         } else {
             console.error('❌ Backend responded with error:', response.status);
             backendConnected = false;
-            showBackendWarning();
             return false;
         }
     } catch (error) {
         console.error('❌ Backend connection failed:', error);
         backendConnected = false;
-        showBackendWarning();
         return false;
     }
-}
-
-function showBackendWarning() {
-    const uploadArea = document.querySelector('.upload-area');
-    if (!uploadArea) return;
-
-    if (!document.getElementById('backendWarning')) {
-        const warning = document.createElement('div');
-        warning.id = 'backendWarning';
-        warning.style.cssText = `
-            background: #fff3cd;
-            border: 2px solid #ffc107;
-            border-radius: 10px;
-            padding: 15px;
-            margin: 15px 0;
-            color: #856404;
-            text-align: center;
-        `;
-        warning.innerHTML = `
-            <strong>⚠️ Backend not connected</strong><br>
-            <small>Using demo mode with local processing</small>
-        `;
-        uploadArea.insertAdjacentElement('beforebegin', warning);
-    }
-}
-
-function hideBackendWarning() {
-    const warning = document.getElementById('backendWarning');
-    if (warning) warning.remove();
 }
 
 function displayUsers(users) {
@@ -76,12 +61,34 @@ function displayUsers(users) {
 }
 
 function showPage(pageId) {
-    document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+    // Remove active from all pages except auth
+    document.querySelectorAll('.page').forEach(page => {
+        if (page.id !== 'auth') {
+            page.classList.remove('active');
+            page.style.display = 'none';
+        }
+    });
+    
+    // Remove active from all nav buttons
     document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
 
-    document.getElementById(pageId).classList.add('active');
-    event.currentTarget.classList.add('active');
+    // Show the target page
+    const targetPage = document.getElementById(pageId);
+    if (targetPage) {
+        targetPage.classList.add('active');
+        targetPage.style.display = 'block';
+    }
 
+    // Find and activate the corresponding nav button
+    const navButtons = document.querySelectorAll('.nav-btn');
+    navButtons.forEach(btn => {
+        const btnText = btn.textContent.trim().toLowerCase();
+        if (btnText.includes(pageId.toLowerCase())) {
+            btn.classList.add('active');
+        }
+    });
+
+    // Load content if needed
     if (pageId === 'flashcard' && flashcards.length > 0) loadFlashcards();
     if (pageId === 'quiz' && questions.length > 0) startQuiz();
 }
@@ -97,26 +104,57 @@ async function handleFileUpload(event) {
     uploadArea.innerHTML = '<div class="loading active"><div class="spinner"></div><p>Uploading and processing file...</p></div>';
 
     try {
-        if (!backendConnected) throw new Error('Backend not connected');
+        // Add Authorization header for file upload
+        const headers = {};
+        const token = getAuthToken();
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        console.log('Uploading to:', `${API_BASE_URL}/reviewers/upload`);
+        console.log('With token:', token ? 'Yes' : 'No');
 
         const response = await fetch(`${API_BASE_URL}/reviewers/upload`, { 
             method: 'POST', 
+            headers: headers,
             body: formData 
         });
         
-        if (!response.ok) throw new Error('Upload failed');
+        console.log('Upload response status:', response.status);
+        
+        if (response.status === 401) {
+            throw new Error('Session expired - please login again');
+        }
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Upload error response:', errorText);
+            throw new Error(`Upload failed with status: ${response.status}`);
+        }
 
         const data = await response.json();
-        currentReviewerId = data.id;
+        console.log('Upload response data:', data);
+        
+        // Handle different response formats
+        currentReviewerId = data.id || data.reviewerId || data.reviewer?.id;
+        
+        if (!currentReviewerId) {
+            console.error('No reviewer ID in response:', data);
+            throw new Error('Invalid response from server');
+        }
 
         uploadArea.innerHTML = `
-            <div class="upload-success">
-                <div class="success-icon">✅</div>
+            <div class="upload-success" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 2rem; border-radius: 1.5rem; text-align: center;">
+                <div class="success-icon" style="font-size: 3rem; margin-bottom: 1rem;">✅</div>
                 <h2>File uploaded successfully!</h2>
-                <p>File: ${data.fileName}</p>
+                <p>File: ${data.fileName || data.filename || file.name}</p>
                 <p>Generating summary...</p>
             </div>
         `;
+        
+        // Remove the onclick handler from upload area to prevent errors
+        uploadArea.onclick = null;
+        uploadArea.style.cursor = 'default';
         
         // Load summary and show prompt after
         await loadSummary(currentReviewerId);
@@ -124,16 +162,28 @@ async function handleFileUpload(event) {
 
     } catch (error) {
         console.error('Upload error:', error);
-        backendConnected = false;
-        uploadArea.innerHTML = `
-            <div class="upload-error" style="background: #fff3cd; padding: 20px; border-radius: 10px; text-align: center;">
-                <div class="error-icon" style="font-size: 3rem;">⚠️</div>
-                <h2 style="color: #856404;">Backend not connected</h2>
-                <p style="color: #856404;">Using demo mode with local processing</p>
-                <button class="btn" onclick="location.reload()">Try Again</button>
-            </div>
-        `;
-        readFileLocally(file);
+        
+        if (error.message.includes('Session expired')) {
+            uploadArea.innerHTML = `
+                <div class="upload-error" style="background: #fee2e2; padding: 2rem; border-radius: 1.5rem; text-align: center;">
+                    <div class="error-icon" style="font-size: 3rem; margin-bottom: 1rem;">🔐</div>
+                    <h2 style="color: #dc2626;">Session Expired</h2>
+                    <p style="color: #991b1b;">Please logout and login again</p>
+                    <button class="btn" onclick="logout()" style="margin-top: 1rem;">Logout</button>
+                </div>
+            `;
+        } else {
+            // Always try local processing as fallback
+            uploadArea.innerHTML = `
+                <div class="upload-error" style="background: #fef3c7; padding: 2rem; border-radius: 1.5rem; text-align: center;">
+                    <div class="error-icon" style="font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
+                    <h2 style="color: #92400e;">Using Demo Mode</h2>
+                    <p style="color: #78350f;">Processing file locally...</p>
+                </div>
+            `;
+            
+            readFileLocally(file);
+        }
     }
 }
 
@@ -144,7 +194,6 @@ function readFileLocally(file) {
         window.localContent = content;
         generateLocalSummary(content);
         
-        // Show prompt after local summary generation
         setTimeout(() => showConversionPrompt(), 500);
     };
     reader.readAsText(file);
@@ -170,20 +219,47 @@ async function loadSummary(reviewerId) {
     if (loading) loading.style.display = 'block';
 
     try {
-        if (!backendConnected) throw new Error('Backend not connected');
+        console.log('Loading summary for reviewer ID:', reviewerId);
 
-        const response = await fetch(`${API_BASE_URL}/reviewers/${reviewerId}/summary`);
-        if (!response.ok) throw new Error('Failed to load summary');
+        const response = await fetch(`${API_BASE_URL}/reviewers/${reviewerId}/summary`, {
+            method: 'GET',
+            headers: getAuthHeaders()
+        });
+        
+        console.log('Summary response status:', response.status);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Summary error:', errorText);
+            throw new Error('Failed to load summary');
+        }
 
         const data = await response.json();
-        summaryBox.innerHTML = `<pre>${data.summary}</pre>`;
+        console.log('Summary data received:', data);
+        
+        // Handle different response formats
+        const summaryText = data.summary || data.content || data.text || JSON.stringify(data, null, 2);
+        
+        summaryBox.innerHTML = `<pre>${summaryText}</pre>`;
         
         // Auto-navigate to summary page
         showPageById('summary');
         
     } catch (error) {
         console.error('Error loading summary:', error);
-        generateLocalSummary(window.localContent || 'No content available');
+        
+        // If we have local content, use it
+        if (window.localContent) {
+            generateLocalSummary(window.localContent);
+        } else {
+            summaryBox.innerHTML = `
+                <div style="text-align: center; padding: 2rem; color: #dc2626;">
+                    <h3>Failed to load summary</h3>
+                    <p>${error.message}</p>
+                    <button class="btn" onclick="location.reload()">Try Again</button>
+                </div>
+            `;
+        }
     } finally {
         if (loading) loading.style.display = 'none';
     }
@@ -191,17 +267,45 @@ async function loadSummary(reviewerId) {
 
 // Helper function to show page without event dependency
 function showPageById(pageId) {
-    document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+    console.log('Navigating to page:', pageId);
+    
+    // Hide auth page if visible
+    const authPage = document.getElementById('auth');
+    if (authPage) {
+        authPage.classList.remove('active');
+        authPage.style.display = 'none';
+    }
+
+    // Hide all other pages
+    document.querySelectorAll('.page').forEach(page => {
+        if (page.id !== 'auth') {
+            page.classList.remove('active');
+            page.style.display = 'none';
+        }
+    });
+    
+    // Remove active from all nav buttons
     document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
 
-    document.getElementById(pageId).classList.add('active');
+    // Show the target page
+    const targetPage = document.getElementById(pageId);
+    if (targetPage) {
+        targetPage.classList.add('active');
+        targetPage.style.display = 'block';
+        console.log('Page activated:', pageId);
+    } else {
+        console.error('Page not found:', pageId);
+    }
     
     // Activate corresponding nav button
     const pageMap = { 'home': 0, 'summary': 1, 'flashcard': 2, 'quiz': 3 };
-    const navButtons = document.querySelectorAll('.nav-btn');
+    const navButtons = document.querySelectorAll('.nav-btn:not(.logout-btn)');
     if (navButtons[pageMap[pageId]]) {
         navButtons[pageMap[pageId]].classList.add('active');
     }
+    
+    // Scroll to top
+    window.scrollTo(0, 0);
 }
 
 // Show conversion prompt modal
@@ -249,15 +353,41 @@ async function convertToFlashcards() {
     flashcardBox.innerHTML = '<h2>Generating flashcards...</h2>';
     
     try {
-        if (backendConnected && currentReviewerId) {
-            // Call backend API to generate flashcards
-            const response = await fetch(`${API_BASE_URL}/reviewers/${currentReviewerId}/flashcards`);
-            if (!response.ok) throw new Error('Failed to generate flashcards');
-            
+        if (!currentReviewerId) throw new Error('No reviewer ID available');
+        
+        console.log('Requesting flashcards for reviewer:', currentReviewerId);
+        
+        const response = await fetch(`${API_BASE_URL}/reviewers/${currentReviewerId}/flashcards`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+        
+        console.log('Flashcard response status:', response.status);
+        
+        if (response.ok) {
             const data = await response.json();
-            flashcards = data.flashcards || [];
+            console.log('Flashcard data received:', data);
+            
+            // Handle different response formats
+            if (Array.isArray(data)) {
+                flashcards = data;
+            } else if (data.flashcards && Array.isArray(data.flashcards)) {
+                flashcards = data.flashcards;
+            } else if (data.data && Array.isArray(data.data)) {
+                flashcards = data.data;
+            } else {
+                console.warn('Unexpected flashcard format:', data);
+                flashcards = [];
+            }
+            
+            console.log('Flashcards loaded:', flashcards.length, 'cards');
         } else {
-            // Generate flashcards locally
+            console.warn('Flashcard generation failed, using local mode');
+            flashcards = generateLocalFlashcards(window.localContent || '');
+        }
+        
+        if (flashcards.length === 0) {
+            console.warn('No flashcards generated, using demo data');
             flashcards = generateLocalFlashcards(window.localContent || '');
         }
         
@@ -281,15 +411,41 @@ async function convertToQuiz() {
     quizContainer.innerHTML = '<p style="text-align: center; padding: 2rem;">Generating quiz questions...</p>';
     
     try {
-        if (backendConnected && currentReviewerId) {
-            // Call backend API to generate quiz
-            const response = await fetch(`${API_BASE_URL}/reviewers/${currentReviewerId}/quiz`);
-            if (!response.ok) throw new Error('Failed to generate quiz');
-            
+        if (!currentReviewerId) throw new Error('No reviewer ID available');
+        
+        console.log('Requesting quiz for reviewer:', currentReviewerId);
+        
+        const response = await fetch(`${API_BASE_URL}/reviewers/${currentReviewerId}/quiz`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+        
+        console.log('Quiz response status:', response.status);
+        
+        if (response.ok) {
             const data = await response.json();
-            questions = data.questions || [];
+            console.log('Quiz data received:', data);
+            
+            // Handle different response formats
+            if (Array.isArray(data)) {
+                questions = data;
+            } else if (data.questions && Array.isArray(data.questions)) {
+                questions = data.questions;
+            } else if (data.data && Array.isArray(data.data)) {
+                questions = data.data;
+            } else {
+                console.warn('Unexpected quiz format:', data);
+                questions = [];
+            }
+            
+            console.log('Questions loaded:', questions.length, 'questions');
         } else {
-            // Generate quiz locally
+            console.warn('Quiz generation failed, using local mode');
+            questions = generateLocalQuiz(window.localContent || '');
+        }
+        
+        if (questions.length === 0) {
+            console.warn('No questions generated, using demo data');
             questions = generateLocalQuiz(window.localContent || '');
         }
         
@@ -363,8 +519,12 @@ function displayCurrentFlashcard() {
     const flashcardBox = document.getElementById('flashcardBox');
     const card = flashcards[currentFlashcardIndex];
     
+    // Support backend format (term/definition) and local format (question/answer)
+    const front = card.term || card.question || 'Loading...';
+    const back = card.definition || card.answer || 'Loading...';
+    
     flashcardBox.className = 'flashcard';
-    flashcardBox.innerHTML = `<h2>${showingAnswer ? card.answer : card.question}</h2>`;
+    flashcardBox.innerHTML = `<h2>${showingAnswer ? back : front}</h2>`;
 }
 
 function flipFlashcard() {
@@ -401,10 +561,10 @@ function startQuiz() {
             <h3>Question ${index + 1}</h3>
             <p>${q.question}</p>
             <div class="quiz-options">
-                ${q.options.map((option, optIndex) => `
+                ${(q.choices || q.options || []).map((choice, optIndex) => `
                     <label class="quiz-option">
-                        <input type="radio" name="question${index}" value="${optIndex}">
-                        <span>${option}</span>
+                        <input type="radio" name="question${index}" value="${choice}">
+                        <span>${choice}</span>
                     </label>
                 `).join('')}
             </div>
@@ -416,7 +576,8 @@ function submitQuiz() {
     let score = 0;
     questions.forEach((q, index) => {
         const selected = document.querySelector(`input[name="question${index}"]:checked`);
-        if (selected && parseInt(selected.value) === q.correctAnswer) {
+        // correctAnswer is a string value (the actual correct option text)
+        if (selected && selected.value === q.correctAnswer) {
             score++;
         }
     });
