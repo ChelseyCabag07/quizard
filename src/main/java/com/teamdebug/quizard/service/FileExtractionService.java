@@ -24,6 +24,8 @@ public class FileExtractionService {
             return extractFromTxt(file);
         } else if ("docx".equals(fileExtension) || "doc".equals(fileExtension)) {
             return extractFromDocx(file);
+        } else if ("pdf".equals(fileExtension)) {
+            return extractFromPdf(file);
         } else {
             throw new IOException("Unsupported file type: " + fileExtension);
         }
@@ -47,6 +49,12 @@ public class FileExtractionService {
             
             return extractor.getText().trim();
         }
+    }
+
+    private String extractFromPdf(MultipartFile file) throws IOException {
+        // For now, return a placeholder message
+        // Full PDF extraction would require additional PDF libraries
+        return "PDF support coming soon. Please use TXT or DOCX files instead.";
     }
     
     private String getFileExtension(String fileName) {

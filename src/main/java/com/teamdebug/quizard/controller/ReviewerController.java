@@ -35,7 +35,7 @@ public class ReviewerController {
         try {
             // Read file content using FileExtractionService
             String fileName = file.getOriginalFilename();
-            String content = fileExtractionService.extractText(file); // ✅ FIXED - Now extracts properly!
+            String content = fileExtractionService.extractText(file);
 
             // Create reviewer
             Reviewer reviewer = new Reviewer();
@@ -118,13 +118,13 @@ public class ReviewerController {
         int count = 0;
         for (String sentence : sentences) {
             String trimmed = sentence.trim();
-            if (trimmed.length() > 20 && count < 5) {
+            if (trimmed.length() > 10 && count < 10) {  // Lowered from 20 to 10
                 summary.append(++count).append(". ").append(trimmed).append(".\n\n");
             }
         }
 
         if (count == 0) {
-            summary.append("Summary could not be generated. Content may be too short.");
+            summary.append("Summary: ").append(content.substring(0, Math.min(200, content.length())));
         }
 
         return summary.toString();
@@ -137,7 +137,7 @@ public class ReviewerController {
 
         for (int i = 0; i < Math.min(10, sentences.length); i++) {
             String sentence = sentences[i].trim();
-            if (sentence.length() > 30) {
+            if (sentence.length() > 10) {  // Lowered from 30 to 10
                 // Create term (first part of sentence)
                 String[] words = sentence.split(" ");
                 String term = String.join(" ", Arrays.copyOfRange(words, 0, Math.min(5, words.length)));
@@ -164,7 +164,7 @@ public class ReviewerController {
 
         for (int i = 0; i < Math.min(5, sentences.length); i++) {
             String sentence = sentences[i].trim();
-            if (sentence.length() > 30) {
+            if (sentence.length() > 10) {  // Lowered from 30 to 10
                 // Create multiple choice question
                 QuizItem quizItem = new QuizItem();
                 quizItem.setId(nextQuizItemId++);
