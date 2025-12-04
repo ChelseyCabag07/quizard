@@ -9,11 +9,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import org.springframework.web.bind.annotation.RequestMethod;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/reviewers")
-@CrossOrigin(origins = {"http://localhost:5500", "http://127.0.0.1:5500"})
+@CrossOrigin(origins = "*", allowedHeaders = "*", methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.OPTIONS})
 public class ReviewerController {
 
     @Autowired
@@ -157,35 +159,86 @@ public class ReviewerController {
         return flashcards;
     }
 
-    // Helper: Generate quiz items
+    // Helper: Generate quiz items with content-based questions
     private List<QuizItem> generateQuizItems(String content, Long reviewerId) {
         List<QuizItem> quizItems = new ArrayList<>();
         String[] sentences = content.split("[.!?]+");
-
-        for (int i = 0; i < Math.min(5, sentences.length); i++) {
-            String sentence = sentences[i].trim();
-            if (sentence.length() > 10) {  // Lowered from 30 to 10
-                // Create multiple choice question
-                QuizItem quizItem = new QuizItem();
-                quizItem.setId(nextQuizItemId++);
-                quizItem.setQuestion("What is the main idea of this statement?");
-                
-                // Create choices (correct answer + distractors)
-                List<String> choices = new ArrayList<>();
-                choices.add(sentence); // Correct answer
-                choices.add("This is an incorrect option");
-                choices.add("This is also incorrect");
-                choices.add("Not the correct answer");
-                
-                // Shuffle choices
-                Collections.shuffle(choices);
-                
-                quizItem.setChoices(choices);
-                quizItem.setCorrectAnswer(sentence);
-                quizItem.setType("MCQ");
-
-                quizItems.add(quizItem);
+        
+        // Filter valid sentences
+        List<String> validSentences = new ArrayList<>();
+        for (String sentence : sentences) {
+            String trimmed = sentence.trim();
+            if (trimmed.length() > 15) {
+                validSentences.add(trimmed);
             }
+        }
+        
+        if (validSentences.isEmpty()) {
+            return quizItems;
+        }
+
+        // Generate different types of questions
+        for (int i = 0; i < Math.min(5, validSentences.size()); i++) {
+            String sentence = validSentences.get(i);
+            String[] words = sentence.split("\\s+");
+            
+            QuizItem quizItem = new QuizItem();
+            quizItem.setId(nextQuizItemId++);
+            quizItem.setType("MCQ");
+            
+            // Create fill-in-the-blank style question
+            if (words.length >= 5) {
+                // Pick a key word to blank out (not first or last word)
+                int blankIndex = Math.min(3, words.length / 2);
+                String blankWord = words[blankIndex];
+                
+                // Create question with blank
+                StringBuilder questionBuilder = new StringBuilder("Complete the sentence: ");
+                for (int j = 0; j < words.length; j++) {
+                    if (j == blankIndex) {
+                        questionBuilder.append("________ ");
+                    } else {
+                        questionBuilder.append(words[j]).append(" ");
+                    }
+                }
+                quizItem.setQuestion(questionBuilder.toString().trim());
+                
+                // Create choices from content
+                List<String> choices = new ArrayList<>();
+                choices.add(blankWord); // Correct answer
+                
+                // Get distractors from other sentences
+                Set<String> usedWords = new HashSet<>();
+                usedWords.add(blankWord.toLowerCase());
+                
+                for (String otherSentence : validSentences) {
+                    if (choices.size() >= 4) break;
+                    String[] otherWords = otherSentence.split("\\s+");
+                    for (String word : otherWords) {
+                        if (word.length() > 3 && !usedWords.contains(word.toLowerCase()) && choices.size() < 4) {
+                            choices.add(word);
+                            usedWords.add(word.toLowerCase());
+                        }
+                    }
+                }
+                
+                // Fill remaining with generic if needed
+                while (choices.size() < 4) {
+                    choices.add("Option " + (choices.size() + 1));
+                }
+                
+                Collections.shuffle(choices);
+                quizItem.setChoices(choices);
+                quizItem.setCorrectAnswer(blankWord);
+            } else {
+                // Fallback to true/false style
+                quizItem.setQuestion("Is this statement from the document? \"" + sentence + "\"");
+                List<String> choices = new ArrayList<>(Arrays.asList("True - This is correct", "False - This is incorrect", "Partially correct", "Cannot determine"));
+                quizItem.setChoices(choices);
+                quizItem.setCorrectAnswer("True - This is correct");
+            }
+
+            quizItems.add(quizItem);
         }
 
         return quizItems;

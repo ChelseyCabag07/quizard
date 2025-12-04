@@ -362,13 +362,23 @@ async function convertToFlashcards() {
     flashcardBox.innerHTML = '<h2>Generating flashcards...</h2>';
     
     try {
-        if (!currentReviewerId) throw new Error('No reviewer ID available');
+        if (!currentReviewerId) {
+            console.warn('No reviewer ID, using local content');
+            throw new Error('No reviewer ID available');
+        }
         
         console.log('Requesting flashcards for reviewer:', currentReviewerId);
         
+        // Don't send Content-Type for POST without body
+        const headers = {};
+        const token = getAuthToken();
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
         const response = await fetch(`${API_BASE_URL}/reviewers/${currentReviewerId}/flashcards`, {
             method: 'POST',
-            headers: getAuthHeaders()
+            headers: headers
         });
         
         console.log('Flashcard response status:', response.status);
@@ -391,7 +401,8 @@ async function convertToFlashcards() {
             
             console.log('Flashcards loaded:', flashcards.length, 'cards');
         } else {
-            console.warn('Flashcard generation failed, using local mode');
+            const errorText = await response.text();
+            console.warn('Flashcard generation failed:', response.status, errorText);
             flashcards = generateLocalFlashcards(window.localContent || '');
         }
         
@@ -420,13 +431,23 @@ async function convertToQuiz() {
     quizContainer.innerHTML = '<p style="text-align: center; padding: 2rem;">Generating quiz questions...</p>';
     
     try {
-        if (!currentReviewerId) throw new Error('No reviewer ID available');
+        if (!currentReviewerId) {
+            console.warn('No reviewer ID, using local content');
+            throw new Error('No reviewer ID available');
+        }
         
         console.log('Requesting quiz for reviewer:', currentReviewerId);
         
+        // Don't send Content-Type for POST without body
+        const headers = {};
+        const token = getAuthToken();
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
         const response = await fetch(`${API_BASE_URL}/reviewers/${currentReviewerId}/quiz`, {
             method: 'POST',
-            headers: getAuthHeaders()
+            headers: headers
         });
         
         console.log('Quiz response status:', response.status);
@@ -449,7 +470,8 @@ async function convertToQuiz() {
             
             console.log('Questions loaded:', questions.length, 'questions');
         } else {
-            console.warn('Quiz generation failed, using local mode');
+            const errorText = await response.text();
+            console.warn('Quiz generation failed:', response.status, errorText);
             questions = generateLocalQuiz(window.localContent || '');
         }
         
@@ -486,35 +508,91 @@ function generateLocalFlashcards(content) {
     ];
 }
 
-// Generate local quiz (fallback)
+// Generate local quiz (fallback) - content-based questions
 function generateLocalQuiz(content) {
-    const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 20);
-    const quizQuestions = [];
-    
-    for (let i = 0; i < Math.min(3, sentences.length); i++) {
-        quizQuestions.push({
-            question: `Question ${i + 1}: What does the content discuss?`,
-            options: [
-                sentences[i]?.trim() || 'Option A',
-                'Incorrect option B',
-                'Incorrect option C',
-                'Incorrect option D'
-            ],
-            correctAnswer: 0
-        });
+    if (!content || content.trim().length < 20) {
+        console.warn('Content too short for quiz generation');
+        return getDemoQuiz();
     }
     
-    return quizQuestions.length > 0 ? quizQuestions : [
+    const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 15);
+    const quizQuestions = [];
+    
+    // Extract words for distractors
+    const allWords = content.split(/\s+/).filter(w => w.length > 3);
+    const uniqueWords = [...new Set(allWords.map(w => w.replace(/[^a-zA-Z]/g, '')))].filter(w => w.length > 3);
+    
+    for (let i = 0; i < Math.min(5, sentences.length); i++) {
+        const sentence = sentences[i].trim();
+        const words = sentence.split(/\s+/);
+        
+        if (words.length >= 4) {
+            // Create fill-in-the-blank question
+            const blankIndex = Math.min(2, Math.floor(words.length / 2));
+            const correctWord = words[blankIndex].replace(/[^a-zA-Z]/g, '');
+            
+            // Build question with blank
+            const questionWords = words.map((w, idx) => idx === blankIndex ? '________' : w);
+            const question = `Complete the sentence: "${questionWords.join(' ')}"`;
+            
+            // Get distractors from content
+            const distractors = uniqueWords
+                .filter(w => w.toLowerCase() !== correctWord.toLowerCase())
+                .slice(0, 3);
+            
+            // Ensure we have 4 options
+            while (distractors.length < 3) {
+                distractors.push(`Option ${distractors.length + 2}`);
+            }
+            
+            const options = [correctWord, ...distractors];
+            shuffleArray(options);
+            
+            quizQuestions.push({
+                question: question,
+                choices: options,
+                options: options,
+                correctAnswer: correctWord
+            });
+        } else {
+            // True/False question
+        quizQuestions.push({
+                question: `Is this statement from the document? "${sentence}"`,
+                choices: ['True - This is correct', 'False - This is incorrect', 'Partially correct', 'Cannot determine'],
+                options: ['True - This is correct', 'False - This is incorrect', 'Partially correct', 'Cannot determine'],
+                correctAnswer: 'True - This is correct'
+            });
+        }
+    }
+    
+    return quizQuestions.length > 0 ? quizQuestions : getDemoQuiz();
+}
+
+// Demo quiz when no content available
+function getDemoQuiz() {
+    return [
         {
-            question: 'Sample question about the content?',
-            options: ['Correct answer', 'Wrong answer 1', 'Wrong answer 2', 'Wrong answer 3'],
-            correctAnswer: 0
+            question: 'Upload a document to generate quiz questions from your study material.',
+            choices: ['I understand', 'Show me how', 'Need help', 'Skip for now'],
+            options: ['I understand', 'Show me how', 'Need help', 'Skip for now'],
+            correctAnswer: 'I understand'
         }
     ];
 }
 
+// Shuffle array helper
+function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+}
+
 // Load and display flashcards
 function loadFlashcards() {
+    console.log('Loading flashcards, count:', flashcards.length);
+    
     if (flashcards.length === 0) {
         document.getElementById('flashcardBox').innerHTML = '<h2>No flashcards available</h2>';
         return;
@@ -528,12 +606,25 @@ function displayCurrentFlashcard() {
     const flashcardBox = document.getElementById('flashcardBox');
     const card = flashcards[currentFlashcardIndex];
     
+    console.log('Displaying flashcard:', currentFlashcardIndex, card);
+    
+    if (!card) {
+        flashcardBox.innerHTML = '<h2>No flashcard data</h2>';
+        return;
+    }
+    
     // Support backend format (term/definition) and local format (question/answer)
-    const front = card.term || card.question || 'Loading...';
-    const back = card.definition || card.answer || 'Loading...';
+    const front = card.term || card.question || 'No question available';
+    const back = card.definition || card.answer || 'No answer available';
     
     flashcardBox.className = 'flashcard';
-    flashcardBox.innerHTML = `<h2>${showingAnswer ? back : front}</h2>`;
+    flashcardBox.innerHTML = `
+        <p style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 1rem;">
+            Card ${currentFlashcardIndex + 1} of ${flashcards.length} • ${showingAnswer ? '📖 Answer' : '❓ Question'}
+        </p>
+        <h2 style="font-size: 1.3rem; line-height: 1.5;">${showingAnswer ? back : front}</h2>
+        <p style="font-size: 0.85rem; opacity: 0.7; margin-top: 1.5rem;">Click to flip</p>
+    `;
 }
 
 function flipFlashcard() {
@@ -558,27 +649,55 @@ function startQuiz() {
     const quizContainer = document.getElementById('quizContainer');
     const scoreDisplay = document.getElementById('scoreDisplay');
     
+    console.log('Starting quiz with', questions.length, 'questions');
+    console.log('Questions data:', questions);
+    
     if (scoreDisplay) scoreDisplay.style.display = 'none';
     
     if (questions.length === 0) {
-        quizContainer.innerHTML = '<p style="text-align: center;">No quiz questions available</p>';
+        quizContainer.innerHTML = `
+            <div style="text-align: center; padding: 2rem;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">📝</div>
+                <h3>No quiz questions available</h3>
+                <p style="color: #6b7280; margin-top: 0.5rem;">Please upload a document first to generate quiz questions.</p>
+                <button class="btn" onclick="showPageById('home')" style="margin-top: 1rem;">Upload Document</button>
+            </div>
+        `;
         return;
     }
     
-    quizContainer.innerHTML = questions.map((q, index) => `
+    quizContainer.innerHTML = `
+        <div style="text-align: center; margin-bottom: 1.5rem;">
+            <h2 style="color: #6366f1;">📝 Quiz Time!</h2>
+            <p style="color: #6b7280;">${questions.length} question${questions.length > 1 ? 's' : ''} based on your document</p>
+        </div>
+    ` + questions.map((q, index) => {
+        const choices = q.choices || q.options || [];
+        console.log(`Question ${index + 1}:`, q.question, 'Choices:', choices);
+        
+        return `
         <div class="quiz-question">
-            <h3>Question ${index + 1}</h3>
-            <p>${q.question}</p>
+                <h3>Question ${index + 1} of ${questions.length}</h3>
+                <p style="font-size: 1.1rem; line-height: 1.6;">${q.question}</p>
             <div class="quiz-options">
-                ${(q.choices || q.options || []).map((choice, optIndex) => `
+                    ${choices.map((choice, optIndex) => `
                     <label class="quiz-option">
-                        <input type="radio" name="question${index}" value="${choice}">
-                        <span>${choice}</span>
+                            <input type="radio" name="question${index}" value="${escapeHtml(choice)}">
+                            <span>${escapeHtml(choice)}</span>
                     </label>
                 `).join('')}
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
+}
+
+// Helper to escape HTML in quiz options
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function submitQuiz() {
