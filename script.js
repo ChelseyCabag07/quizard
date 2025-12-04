@@ -1,4 +1,5 @@
-const API_BASE_URL = 'http://localhost:8080/api';
+const API_BASE_URL = 'http://localhost:8080/api';  // Spring Boot for file operations
+const AUTH_API_URL = 'http://localhost:3000/api';  // Node.js for authentication
 
 let currentReviewerId = null;
 let currentFlashcardIndex = 0;
@@ -24,23 +25,31 @@ function getAuthHeaders() {
 
 async function testBackendConnection() {
     try {
-        const response = await fetch(`${API_BASE_URL}/users`, {
+        // Test auth server connection (Node.js on port 3000)
+        const authResponse = await fetch(`${AUTH_API_URL}/users`, {
             method: 'GET',
             headers: getAuthHeaders()
         });
 
-        if (response.ok) {
-            console.log('✅ Backend connected successfully!');
-            backendConnected = true;
-            const users = await response.json();
+        if (authResponse.ok) {
+            console.log('✅ Auth server connected successfully!');
+            const users = await authResponse.json();
             displayUsers(users);
-            return true;
-        } else if (response.status === 401) {
-            console.warn('⚠️ Authentication required');
-            backendConnected = true; // Backend is up, just needs auth
-            return false;
         } else {
-            console.error('❌ Backend responded with error:', response.status);
+            console.warn('⚠️ Auth server responded with:', authResponse.status);
+        }
+
+        // Test file server connection (Spring Boot on port 8080)
+        const fileResponse = await fetch(`${API_BASE_URL}/quiz/test`, {
+            method: 'GET'
+        });
+
+        if (fileResponse.ok) {
+            console.log('✅ File server connected successfully!');
+            backendConnected = true;
+            return true;
+        } else {
+            console.warn('⚠️ File server responded with:', fileResponse.status);
             backendConnected = false;
             return false;
         }

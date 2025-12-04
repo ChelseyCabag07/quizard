@@ -142,44 +142,82 @@
 
     <script src="script.js"></script>
     <script>
-        // Auth Functions
+        // API Configuration
+        const AUTH_API_URL = 'http://localhost:3000/api';  // Node.js auth server
+        const FILE_API_URL = 'http://localhost:8080/api';  // Spring Boot file server
+
+        // Auth Functions (removed duplicate declarations)
         function showLogin() {
             document.getElementById('loginForm').classList.add('active');
             document.getElementById('signupForm').classList.remove('active');
         }
 
-        function showLogin() {
-         document.getElementById('loginForm').classList.add('active');
-         document.getElementById('signupForm').classList.remove('active');
-        }
-
-        function showSignup() {
-        document.getElementById('loginForm').classList.remove('active');
-        document.getElementById('signupForm').classList.add('active');
-        }
         function showSignup() {
             document.getElementById('loginForm').classList.remove('active');
             document.getElementById('signupForm').classList.add('active');
         }
 
+        // Show error message in a user-friendly way
+        function showAuthError(message, isConnectionError = false) {
+            const errorHtml = isConnectionError 
+                ? `<div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 15px; margin-bottom: 15px; text-align: center;">
+                    <div style="font-size: 2rem; margin-bottom: 10px;">🔌</div>
+                    <strong style="color: #dc2626;">Connection Error</strong>
+                    <p style="color: #991b1b; margin: 10px 0 0 0; font-size: 14px;">${message}</p>
+                    <p style="color: #6b7280; font-size: 12px; margin-top: 8px;">Make sure the auth server is running on port 3000</p>
+                   </div>`
+                : `<div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 12px; margin-bottom: 15px; text-align: center;">
+                    <strong style="color: #dc2626;">⚠️ ${message}</strong>
+                   </div>`;
+            
+            // Remove existing error messages
+            document.querySelectorAll('.auth-error-msg').forEach(el => el.remove());
+            
+            // Add new error message
+            const activeForm = document.querySelector('.auth-form.active');
+            if (activeForm) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'auth-error-msg';
+                errorDiv.innerHTML = errorHtml;
+                activeForm.insertBefore(errorDiv, activeForm.firstChild.nextSibling);
+            }
+        }
+
+        // Clear error messages
+        function clearAuthErrors() {
+            document.querySelectorAll('.auth-error-msg').forEach(el => el.remove());
+        }
+
         function handleLogin(event) {
             if (event) event.preventDefault();
+            clearAuthErrors();
             
             const email = document.getElementById('loginEmail').value.trim();
             const password = document.getElementById('loginPassword').value;
 
             if (!email || !password) {
-                alert('Please fill in all fields');
+                showAuthError('Please fill in all fields');
                 return;
             }
 
-            // Call backend API for login
-            fetch("http://localhost:8080/api/login", {
+            // Show loading state
+            const loginBtn = document.querySelector('#loginForm .btn-primary');
+            const originalText = loginBtn.textContent;
+            loginBtn.textContent = 'Logging in...';
+            loginBtn.disabled = true;
+
+            // Call Node.js auth server on port 3000
+            fetch(`${AUTH_API_URL}/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email, password })
             })
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok && res.status === 0) {
+                    throw new Error('CONNECTION_ERROR');
+                }
+                return res.json();
+            })
             .then(data => {
                 if (data.success) {
                     // Store user info
@@ -193,39 +231,59 @@
                     // Redirect to dashboard
                     showMainApp();
                 } else {
-                    alert(data.message || 'Login failed. Please check your credentials.');
+                    showAuthError(data.message || 'Invalid email or password');
                 }
             })
             .catch(err => {
                 console.error("Login error:", err);
-                alert('Login failed. Please try again.');
+                if (err.message === 'CONNECTION_ERROR' || err.name === 'TypeError') {
+                    showAuthError('Unable to connect to the server. Please ensure the auth server is running.', true);
+                } else {
+                    showAuthError('Login failed. Please check your connection and try again.');
+                }
+            })
+            .finally(() => {
+                loginBtn.textContent = originalText;
+                loginBtn.disabled = false;
             });
         }
 
         function handleSignup(event) {
             if (event) event.preventDefault();
+            clearAuthErrors();
             
             const name = document.getElementById('signupName').value.trim();
             const email = document.getElementById('signupEmail').value.trim();
             const password = document.getElementById('signupPassword').value;
 
             if (!name || !email || !password) {
-                alert('Please fill in all fields');
+                showAuthError('Please fill in all fields');
                 return;
             }
 
             if (password.length < 6) {
-                alert('Password must be at least 6 characters long');
+                showAuthError('Password must be at least 6 characters long');
                 return;
             }
 
-            // Call backend API for signup
-            fetch("http://localhost:8080/api/signup", {
+            // Show loading state
+            const signupBtn = document.querySelector('#signupForm .btn-primary');
+            const originalText = signupBtn.textContent;
+            signupBtn.textContent = 'Creating account...';
+            signupBtn.disabled = true;
+
+            // Call Node.js auth server on port 3000
+            fetch(`${AUTH_API_URL}/signup`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name, email, password })
             })
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok && res.status === 0) {
+                    throw new Error('CONNECTION_ERROR');
+                }
+                return res.json();
+            })
             .then(data => {
                 if (data.success) {
                     alert('Account created successfully! Logging you in...');
@@ -244,12 +302,20 @@
                         handleLogin();
                     }, 500);
                 } else {
-                    alert(data.message || 'Signup failed. Email may already be registered.');
+                    showAuthError(data.message || 'Signup failed. Email may already be registered.');
                 }
             })
             .catch(err => {
                 console.error("Signup error:", err);
-                alert('Signup failed. Please try again.');
+                if (err.message === 'CONNECTION_ERROR' || err.name === 'TypeError') {
+                    showAuthError('Unable to connect to the server. Please ensure the auth server is running.', true);
+                } else {
+                    showAuthError('Signup failed. Please check your connection and try again.');
+                }
+            })
+            .finally(() => {
+                signupBtn.textContent = originalText;
+                signupBtn.disabled = false;
             });
         }
 
@@ -293,6 +359,7 @@
                 
                 // Show login form
                 showLogin();
+                clearAuthErrors();
                 
                 alert('You have been logged out successfully');
             }
@@ -323,13 +390,17 @@
         }
 
         function loadUsers() {
-            fetch("http://localhost:8080/api/users")
+            fetch(`${AUTH_API_URL}/users`)
                 .then(res => res.json())
                 .then(data => {
                     const userList = document.getElementById("userList");
                     userList.innerHTML = data.map(user => `<li>${user.name} (${user.email})</li>`).join('');
                 })
-                .catch(err => console.error("Error fetching users:", err));
+                .catch(err => {
+                    console.error("Error fetching users:", err);
+                    const userList = document.getElementById("userList");
+                    userList.innerHTML = '<li style="color: #6b7280;">Unable to load users (server offline)</li>';
+                });
         }
     </script>
 </body>

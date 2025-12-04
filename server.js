@@ -348,13 +348,14 @@ app.post('/api/reviewers/:id/quiz', verifyToken, async (req, res) => {
 // ============================================
 // START SERVER
 // ============================================
-const PORT = 8080;
+const PORT = 3000; // Auth server on port 3000 (Spring Boot uses 8080)
 app.listen(PORT, () => {
     console.log(`
 ╔════════════════════════════════════════╗
-║   🚀 QUIZARD SERVER RUNNING           ║
+║   🚀 QUIZARD AUTH SERVER RUNNING      ║
 ║   📍 http://localhost:${PORT}           ║
 ║   ✅ Ready to accept connections       ║
+║   📝 Spring Boot runs on port 8080     ║
 ╚════════════════════════════════════════╝
     `);
 });
